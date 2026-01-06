@@ -6,7 +6,7 @@ output:
   pdf_document: default
 ---
 
-**Value:** 10% of Final Grade  
+**Value:** 5% of Final Grade  
 
 ---
 
