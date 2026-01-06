@@ -4,7 +4,7 @@
 |------|-------------|------------------------------------------------------------------------|
 | 1    | January 6   | [Data Wrangling and Visualization](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/data_wrangling.md)                                      |
 | 2    | January 13  | [HappyGitwithR](https://happygitwithr.com/)                                                         |
-| 3    | January 20  | Linear Regression                                                      |
+| 3    | January 20  | [Linear Regression](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/linear_regression.md)                                                      |
 | 4    | January 27  | Logistic Regression and KNN                                            |
 | 5    | February 3  | Principal Component Analysis                                           |
 | 6    | February 10 | Clustering Methods                                                     |
