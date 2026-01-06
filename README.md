@@ -173,7 +173,7 @@ __Description__: This is part 1 of the independent analysis. You will need to fi
 ### 5. Supervised Learning
 __Value__: 15% of final grade.    
 __Due Date__: See Course Schedule.    
-__Typev: This assignment will have students understand the supervised learning approaches.    
+__Type__: This assignment will have students understand the supervised learning approaches.    
 __Description__: In this assignment you will apply and compare different methods for supervised learning on a large health administrative dataset, and will use bootstrap and cross-validation techniques.     
 
 ### 6. Causal Forest 
