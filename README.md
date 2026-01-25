@@ -212,3 +212,4 @@ All assignments should be submitted to the appropriate place in Canvas or Github
 ## Late and Missing Assignments
 There is no penalty for late assignments. However, because many assignments have two parts, it is critical to the first assignment of the sections in around the due date. Missing assignments that are not submitted by the end of the course will receive a grade of zero.
 
+![Husky from Daoyi Huang](https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExeDNtZWVvZnN5bWlwcXU3OHQ5ajQxY29kZGhtdnB1czQ3ZHAwa2dldSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/4VIACsYrWirEQ/giphy.gif)
