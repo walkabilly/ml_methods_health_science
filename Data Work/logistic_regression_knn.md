@@ -643,9 +643,17 @@ kable(all_metrics_lr)
 
 
 ``` r
-knn_m <- nearest_neighbor(neighbors = 5) |>
+knn_m <- nearest_neighbor(neighbors = tune()) |>
                 set_mode("classification") |> 
                 set_engine("kknn")
+
+k_tuning <- grid_regular(
+              neighbors(range = c(2,10)
+              ))
+
+ctrl <- control_resamples(save_pred = TRUE)
+
+cross_validation <- vfold_cv(train_data, v = 5)
 ```
 
 * A Recipe `add_recipe` which is how we tell the workflow to process the data. 
@@ -681,33 +689,87 @@ diabetes_wflow_oversamp_knn
 ## K-Nearest Neighbor Model Specification (classification)
 ## 
 ## Main Arguments:
-##   neighbors = 5
+##   neighbors = tune()
 ## 
 ## Computational engine: kknn
 ```
 
-Now we will actually fit the model to the data using the recipe and `fit` command. 
-
-
 ``` r
-diabetes_fit_oversamp_knn <- 
-  diabetes_wflow_oversamp_knn %>% 
-  fit(data = train_data)
+knn_tune <- tune_grid(
+              diabetes_wflow_oversamp_knn, 
+              resamples = cross_validation,
+              grid = k_tuning, 
+              control = ctrl
+)
+
+knn_tune |> collect_metrics()
 ```
 
-```{}
-diabetes_fit_oversamp_knn %>% 
-  extract_fit_parsnip() %>% 
-  tidy()
+```
+## # A tibble: 9 × 7
+##   neighbors .metric     .estimator  mean     n std_err .config        
+##       <int> <chr>       <chr>      <dbl> <int>   <dbl> <chr>          
+## 1         2 accuracy    binary     0.794     5 0.00136 pre0_mod1_post0
+## 2         2 brier_class binary     0.192     5 0.00133 pre0_mod1_post0
+## 3         2 roc_auc     binary     0.579     5 0.00332 pre0_mod1_post0
+## 4         6 accuracy    binary     0.771     5 0.00234 pre0_mod2_post0
+## 5         6 brier_class binary     0.179     5 0.00155 pre0_mod2_post0
+## 6         6 roc_auc     binary     0.612     5 0.00239 pre0_mod2_post0
+## 7        10 accuracy    binary     0.764     5 0.00242 pre0_mod3_post0
+## 8        10 brier_class binary     0.182     5 0.00153 pre0_mod3_post0
+## 9        10 roc_auc     binary     0.624     5 0.00230 pre0_mod3_post0
+```
 
-diabetes_aug_oversamp <- 
-  augment(diabetes_fit_oversamp_knn, test_data)
+``` r
+best_neighbors <- knn_tune |>
+                    select_best(metric = "accuracy") |> 
+                    pull(neighbors)
 
-diabetes_fit_oversamp_all_metrics_knn <- metrics(diabetes_fit_oversamp_knn,
-               truth = diabetes,
-               estimate = .pred_class)
-               
-kable(diabetes_fit_oversamp_all_metrics_knn)
+
+knn_best_train <- diabetes_wflow_oversamp_knn |>
+                    finalize_workflow(
+                      select_best(x = knn_tune, metric = "accuracy")
+                    )
+
+knn_best_train
+```
+
+```
+## ══ Workflow ════════════════════════════════════════════════════════════════════
+## Preprocessor: Recipe
+## Model: nearest_neighbor()
+## 
+## ── Preprocessor ────────────────────────────────────────────────────────────────
+## 5 Recipe Steps
+## 
+## • step_smotenc()
+## • step_unknown()
+## • step_dummy()
+## • step_normalize()
+## • step_zv()
+## 
+## ── Model ───────────────────────────────────────────────────────────────────────
+## K-Nearest Neighbor Model Specification (classification)
+## 
+## Main Arguments:
+##   neighbors = 2
+## 
+## Computational engine: kknn
+```
+
+``` r
+knn_best_train_fit <- knn_best_train |> last_fit(data_split)
+
+knn_best_train_fit |> collect_metrics()
+```
+
+```
+## # A tibble: 3 × 4
+##   .metric     .estimator .estimate .config        
+##   <chr>       <chr>          <dbl> <chr>          
+## 1 accuracy    binary         0.808 pre0_mod0_post0
+## 2 roc_auc     binary         0.600 pre0_mod0_post0
+## 3 brier_class binary         0.181 pre0_mod0_post0
 ```
 
 ## Session Info
@@ -718,12 +780,12 @@ sessionInfo()
 ```
 
 ```
-## R version 4.5.2 (2025-10-31)
+## R version 4.5.1 (2025-06-13)
 ## Platform: aarch64-apple-darwin20
 ## Running under: macOS Tahoe 26.2
 ## 
 ## Matrix products: default
-## BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib 
+## BLAS:   /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRblas.0.dylib 
 ## LAPACK: /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
 ## 
 ## locale:
@@ -737,47 +799,47 @@ sessionInfo()
 ## 
 ## other attached packages:
 ##  [1] microbenchmark_1.5.0 kknn_1.4.1           themis_1.0.3        
-##  [4] glmnet_4.1-10        Matrix_1.7-4         vip_0.4.1           
+##  [4] glmnet_4.1-10        Matrix_1.7-3         vip_0.4.1           
 ##  [7] mlbench_2.1-6        gtsummary_2.4.0      knitr_1.50          
 ## [10] finalfit_1.1.0       sjPlot_2.9.0         yardstick_1.3.2     
-## [13] workflowsets_1.1.1   workflows_1.3.0      tune_2.0.0          
+## [13] workflowsets_1.1.1   workflows_1.3.0      tune_2.0.1          
 ## [16] tailor_0.1.0         rsample_1.3.1        recipes_1.3.1       
 ## [19] parsnip_1.3.3        modeldata_1.5.1      infer_1.0.9         
 ## [22] dials_1.4.2          scales_1.4.0         broom_1.0.10        
-## [25] tidymodels_1.4.1     lubridate_1.9.4      forcats_1.0.0       
-## [28] stringr_1.5.2        dplyr_1.1.4          purrr_1.1.0         
-## [31] readr_2.1.5          tidyr_1.3.1          tibble_3.3.1        
-## [34] ggplot2_4.0.0        tidyverse_2.0.0     
+## [25] tidymodels_1.4.1     lubridate_1.9.4      forcats_1.0.1       
+## [28] stringr_1.6.0        dplyr_1.1.4          purrr_1.2.0         
+## [31] readr_2.1.6          tidyr_1.3.1          tibble_3.3.0        
+## [34] ggplot2_4.0.1        tidyverse_2.0.0     
 ## 
 ## loaded via a namespace (and not attached):
-##  [1] Rdpack_2.6.4        rlang_1.1.7         magrittr_2.0.4     
-##  [4] furrr_0.3.1         compiler_4.5.2      vctrs_0.7.0        
+##  [1] Rdpack_2.6.4        rlang_1.1.6         magrittr_2.0.4     
+##  [4] furrr_0.3.1         compiler_4.5.1      vctrs_0.6.5        
 ##  [7] lhs_1.2.0           crayon_1.5.3        pkgconfig_2.0.3    
 ## [10] shape_1.4.6.1       fastmap_1.2.0       backports_1.5.0    
-## [13] labeling_0.4.3      utf8_1.2.6          rmarkdown_2.29     
+## [13] labeling_0.4.3      utf8_1.2.6          rmarkdown_2.30     
 ## [16] prodlim_2025.04.28  tzdb_0.5.0          nloptr_2.2.1       
-## [19] bit_4.6.0           xfun_0.53           jomo_2.7-6         
+## [19] bit_4.6.0           xfun_0.54           jomo_2.7-6         
 ## [22] cachem_1.1.0        jsonlite_2.0.0      pan_1.9            
-## [25] parallel_4.5.2      R6_2.6.1            bslib_0.9.0        
+## [25] parallel_4.5.1      R6_2.6.1            bslib_0.9.0        
 ## [28] stringi_1.8.7       RColorBrewer_1.1-3  parallelly_1.45.1  
-## [31] boot_1.3-32         rpart_4.1.24        jquerylib_0.1.4    
-## [34] Rcpp_1.1.1          iterators_1.0.14    future.apply_1.20.0
-## [37] igraph_2.1.4        splines_4.5.2       nnet_7.3-20        
+## [31] boot_1.3-31         rpart_4.1.24        jquerylib_0.1.4    
+## [34] Rcpp_1.1.0          iterators_1.0.14    future.apply_1.20.0
+## [37] igraph_2.2.1        splines_4.5.1       nnet_7.3-20        
 ## [40] timechange_0.3.0    tidyselect_1.2.1    rstudioapi_0.17.1  
-## [43] yaml_2.3.10         timeDate_4041.110   codetools_0.2-20   
-## [46] listenv_0.9.1       lattice_0.22-7      withr_3.0.2        
-## [49] S7_0.2.0            evaluate_1.0.5      future_1.67.0      
+## [43] yaml_2.3.10         timeDate_4051.111   codetools_0.2-20   
+## [46] listenv_0.10.0      lattice_0.22-7      withr_3.0.2        
+## [49] S7_0.2.1            evaluate_1.0.5      future_1.68.0      
 ## [52] survival_3.8-3      pillar_1.11.1       mice_3.18.0        
-## [55] foreach_1.5.2       reformulas_0.4.1    generics_0.1.4     
-## [58] vroom_1.6.5         hms_1.1.4           minqa_1.2.8        
+## [55] foreach_1.5.2       reformulas_0.4.2    generics_0.1.4     
+## [58] vroom_1.6.6         hms_1.1.4           minqa_1.2.8        
 ## [61] globals_0.18.0      class_7.3-23        glue_1.8.0         
-## [64] ROSE_0.0-4          tools_4.5.2         data.table_1.18.0  
-## [67] lme4_1.1-37         gower_1.0.2         grid_4.5.2         
-## [70] rbibutils_2.3       ipred_0.9-15        nlme_3.1-168       
-## [73] cli_3.6.5           DiceDesign_1.10     lava_1.8.1         
+## [64] ROSE_0.0-4          tools_4.5.1         data.table_1.17.8  
+## [67] lme4_1.1-37         gower_1.0.2         grid_4.5.1         
+## [70] rbibutils_2.4       ipred_0.9-15        nlme_3.1-168       
+## [73] cli_3.6.5           DiceDesign_1.10     lava_1.8.2         
 ## [76] gtable_0.3.6        GPfit_1.0-9         sass_0.4.10        
 ## [79] digest_0.6.39       farver_2.1.2        htmltools_0.5.8.1  
-## [82] lifecycle_1.0.5     hardhat_1.4.2       mitml_0.4-5        
+## [82] lifecycle_1.0.4     hardhat_1.4.2       mitml_0.4-5        
 ## [85] sparsevctrs_0.3.4   bit64_4.6.0-1       MASS_7.3-65
 ```
 
