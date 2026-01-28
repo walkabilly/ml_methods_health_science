@@ -1,0 +1,11 @@
+---
+title: "Intro to GitHub Assignment"
+author: "Maureen Nwobodo"
+date: "2026-01-28"
+output: html_document
+---
+
+# My GitHub Assignment Experience
+
+![Adventurous](https://media.giphy.com/media/13iVUejnqpdXJ6/giphy.gif)
+
