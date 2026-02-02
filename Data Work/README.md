@@ -6,7 +6,7 @@
 | 2    | January 13  | [HappyGitwithR](https://happygitwithr.com/)                                                         |
 | 3    | January 20  | [Linear Regression](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/linear_regression.md)                                                      |
 | 4    | January 27  | [Logistic Regression and KNN](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/logistic_regression_knn.md)                                            |
-| 5    | February 3  | Principal Component Analysis                                           |
+| 5    | February 3  | [Principal Component Analysis](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/principal_component_analysis.md)                                           |
 | 6    | February 10 | Clustering Methods                                                     |
 | 7    | February 17 | Reading Week                                           |                                                                        
 | 8    | February 24 | Cross Validation + Bootstrapping – Applications with Linear Regression |
