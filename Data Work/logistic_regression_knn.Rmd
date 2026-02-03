@@ -376,10 +376,17 @@ kable(all_metrics_lr)
 # K-Nearest Neighbour
 
 ```{r}
-knn_m <- nearest_neighbor(neighbors = 5) |>
+knn_m <- nearest_neighbor(neighbors = tune()) |>
                 set_mode("classification") |> 
                 set_engine("kknn")
-              
+
+k_tuning <- grid_regular(
+              neighbors(range = c(2,10)
+              ))
+
+ctrl <- control_resamples(save_pred = TRUE)
+
+cross_validation <- vfold_cv(train_data, v = 5)
 ```
 
 * A Recipe `add_recipe` which is how we tell the workflow to process the data. 
@@ -394,29 +401,31 @@ diabetes_wflow_oversamp_knn <-
   add_recipe(diabetes_rec_oversamp)
 
 diabetes_wflow_oversamp_knn
-```
 
-Now we will actually fit the model to the data using the recipe and `fit` command. 
+knn_tune <- tune_grid(
+              diabetes_wflow_oversamp_knn, 
+              resamples = cross_validation,
+              grid = k_tuning, 
+              control = ctrl
+)
 
-```{r, messages = FALSE}
-diabetes_fit_oversamp_knn <- 
-  diabetes_wflow_oversamp_knn %>% 
-  fit(data = train_data)
-```
+knn_tune |> collect_metrics()
 
-```{}
-diabetes_fit_oversamp_knn %>% 
-  extract_fit_parsnip() %>% 
-  tidy()
+best_neighbors <- knn_tune |>
+                    select_best(metric = "accuracy") |> 
+                    pull(neighbors)
 
-diabetes_aug_oversamp <- 
-  augment(diabetes_fit_oversamp_knn, test_data)
 
-diabetes_fit_oversamp_all_metrics_knn <- metrics(diabetes_fit_oversamp_knn,
-               truth = diabetes,
-               estimate = .pred_class)
-               
-kable(diabetes_fit_oversamp_all_metrics_knn)
+knn_best_train <- diabetes_wflow_oversamp_knn |>
+                    finalize_workflow(
+                      select_best(x = knn_tune, metric = "accuracy")
+                    )
+
+knn_best_train
+
+knn_best_train_fit <- knn_best_train |> last_fit(data_split)
+
+knn_best_train_fit |> collect_metrics()
 ```
 
 ## Session Info

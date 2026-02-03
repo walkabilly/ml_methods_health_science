@@ -1,0 +1,364 @@
+---
+title: "Principal Component Analysis"
+output:
+      html_document:
+        keep_md: true
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidymodels)
+library(reportRmd)
+library(sjPlot)
+library(plotly)
+library(psych)
+library(parallel)
+library(finalfit)
+library(gtsummary)
+library(mlbench)
+library(vip)
+library(rsample)
+library(tune)
+library(recipes)
+library(yardstick)
+library(parsnip)
+library(glmnet)
+library(themis)
+library(corrr)
+library(performance)
+library(utils)
+library(see)
+
+data <- read_csv("can_path_data.csv")
+```
+
+## Principal Component Analysis
+
+[Principal component analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis) is a data reduction technique that uses covariance or a correlation matrix of a set of observed variables and summarizes it with a smaller set of linear combinations called principal components (PC). These components are statistically independent from one another and capture the maximum amount of variance in the original variables. This means these components can be used to combat collinearity (curse of dimensionality) in a data set statistical modeling. PCA can also be considered a method for feature selection.  
+
+#### Feature selection
+
+Feature selection is an important topic in ML because good predictor requires many features that are able to predict unique aspects of the outcome variable. __Note that PCA only works with numeric variables.__ Factor variables do not work for PCA. One way people get around this is to include factor type variables as numeric (not the best). There are also combined methods [Factorial Analysis of Mixed Data (FAMD)](https://www.sthda.com/english/articles/index.php?url=/31-principal-component-methods-in-r-practical-guide/115-famd-factor-analysis-of-mixed-data-in-r-essentials/) and [Uniform Manifold Approximation and Projection (UMAP)](https://juliasilge.com/blog/cocktail-recipes-umap/).
+
+## Research question and data
+
+How do understand the components that combine multiple features in order to reduce. One challenge with the CanPath data is that there are only a few numeric variables in the dataset. I'm going to subset and remove missing data just for the purpose of this demonstration.  
+
+Variables we have
+
+* SDC_AGE_CALC
+* PA_TOTAL_SHORT
+* PM_BMI_SR
+* SDC_EDU_LEVEL_AGE
+* PSE_ADULT_WRK_DURATION
+* PM_WAIST_HIP_RATIO_SR
+* PA_SIT_AVG_TIME_DAY
+* SLE_TIME
+* NUT_VEG_QTY
+* NUT_FRUITS_QTY
+* NUT_JUICE_QTY
+* ALC_CUR_FREQ
+
+```{r}
+data <- data |> select(ID,
+                       SDC_AGE_CALC, 
+                       PA_TOTAL_SHORT, 
+                       PM_BMI_SR, 
+                       SDC_EDU_LEVEL_AGE, 
+                       PSE_ADULT_WRK_DURATION, 
+                       PM_WAIST_HIP_RATIO_SR,
+                       PA_SIT_AVG_TIME_DAY, 
+                       SLE_TIME, 
+                       NUT_VEG_QTY, 
+                       NUT_FRUITS_QTY, 
+                       NUT_JUICE_QTY, 
+                       ALC_CUR_FREQ, 
+                       SDC_INCOME,
+                       SDC_GENDER)
+
+data$SDC_INCOME <- as.factor(data$SDC_INCOME)
+data$SDC_GENDER <- as.factor(data$SDC_GENDER)
+```
+
+### Preliminary analysis
+
+#### Summary Statistics
+
+```{r}
+rm_covsum(data=data, 
+covs=c('SDC_AGE_CALC','PA_TOTAL_SHORT', 'PM_BMI_SR', 'SDC_EDU_LEVEL_AGE', 'PSE_ADULT_WRK_DURATION', 'PM_WAIST_HIP_RATIO_SR', 'PA_SIT_AVG_TIME_DAY', 'SLE_TIME', 'NUT_VEG_QTY', 'NUT_FRUITS_QTY', 'NUT_JUICE_QTY', 'ALC_CUR_FREQ'))
+
+## Two variables had variables coded as -7. Converting those to missing. 
+data <- data %>% mutate(SDC_EDU_LEVEL_AGE = if_else(SDC_EDU_LEVEL_AGE < 0, NA_real_, SDC_EDU_LEVEL_AGE))
+data <- data %>% mutate(ALC_CUR_FREQ = if_else(ALC_CUR_FREQ < 0, NA_real_, ALC_CUR_FREQ))
+
+data <- data %>%
+          mutate(PA_SIT_AVG_TIME_DAY = case_when(
+            PA_SIT_AVG_TIME_DAY > 360 ~ 360,
+            TRUE ~ PA_SIT_AVG_TIME_DAY
+          ))
+
+### Drop NA
+data <- drop_na(data)
+```
+
+```{r}
+rm_covsum(data=data, 
+covs=c('SDC_AGE_CALC','PA_TOTAL_SHORT', 'PM_BMI_SR', 'SDC_EDU_LEVEL_AGE', 'PSE_ADULT_WRK_DURATION', 'PM_WAIST_HIP_RATIO_SR', 'PA_SIT_AVG_TIME_DAY', 'SLE_TIME', 'NUT_VEG_QTY', 'NUT_FRUITS_QTY', 'NUT_JUICE_QTY', 'ALC_CUR_FREQ'))
+```
+
+#### Correlations 
+
+```{r}
+data %>% 
+  correlate() %>%
+  rearrange() %>%
+  shave()  %>%
+  rplot(print_cor=TRUE)
+```
+
+## PCA 
+
+### Recipe
+
+Setting up the PCA in tidy models is slightly different that the regression based methods we have seen before. We can include the PCA directly in the recipe. Note that we want to scale and center the variables to make the computational part of the PCA quicker and easier. If we don't scale and center we can run into convergence issues. 
+
+If we take a look at the `step_pca` [help page](https://recipes.tidymodels.org/reference/step_pca.html), we see that this argument allows us to provide a unique string to identify this step. Providing a step_id will become handy when we need to extract additional values from that step. Similarly, we could have assigned a unique id to any step we would like to work more on later.
+
+```{r}
+pca_recipe <- recipe(~., data = data) %>%
+  update_role(ID, SDC_INCOME, SDC_GENDER, new_role = "id") %>%
+  step_scale(all_predictors()) %>%
+  step_center(all_predictors()) %>%
+  step_pca(all_predictors(), id = "pca_id")
+
+pca_recipe
+```
+
+### Prepare
+
+Can you see the difference between the outputs of `pca_rec` and `pca_prep`? After prepping we can see that scaling and centering, and PCA extraction with all columns of interest has been trained.
+
+```{r}
+pca_prepared <- prep(pca_recipe)
+
+pca_prepared
+```
+
+### Bake
+
+So far we  
+
+* Defined preprocessing operations with recipe
+* Trained our recipe with prep
+
+Finally, in order to apply these computations to our data and extract the principal components, we will use bake by providing two arguments  
+
+* A prepped (trained) recipe
+* The data we would like to apply these computations to
+
+```{r}
+pca_baked <- bake(pca_prepared, data)
+pca_baked
+```
+
+### Component loadings
+
+When you `tidy()` this step two things can happen depending the type argument. 
+
+If type = "coef" a tibble returned with 4 columns terms, value, component , and id:
+
+* terms
+    * character, the selectors or variables selected
+* value
+    * numeric, variable loading
+* component
+    * character, principle component
+* id
+    * character, id of this step
+
+If type = "variance" a tibble returned with 4 columns terms, value, component , and id:
+
+* terms
+    * character, type of variance
+* value
+    * numeric, value of the variance
+* component
+    * integer, principle component
+* id
+    * character, id of this step
+
+
+```{r}
+pca_variables <- tidy(pca_prepared, id = "pca_id", type = "coef")
+
+ggplot(pca_variables) +
+  geom_point(aes(x = value, y = terms, color = component))+
+  labs(color = NULL) +
+  geom_vline(xintercept=0) + 
+  geom_vline(xintercept=-0.2, linetype = 'dashed') + 
+  geom_vline(xintercept=0.2, linetype = 'dashed') + 
+  facet_wrap(~ component) +
+  theme_minimal()
+```
+
+#### Variance explained by components
+
+```{r}
+pca_variances <- tidy(pca_prepared, id = "pca_id", type = "variance")
+
+pca_variance <- pca_variances |> filter(terms == "percent variance")
+pca_variance$component <- as.factor(pca_variance$component)
+pca_variance$comp <- as.numeric(pca_variance$component)
+
+ggplot(pca_variance, aes(x = component, y = value, group = 1, color = component)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Principal Components", y = "Variance explained (%)") +
+  theme_minimal()
+```
+
+#### Cumulative percent variance
+
+```{r}
+pca_cummul_variance <- pca_variances |> filter(terms == "cumulative percent variance")
+pca_cummul_variance$component <- as.factor(pca_cummul_variance$component)
+pca_cummul_variance$comp <- as.numeric(pca_cummul_variance$component)
+
+ggplot(pca_cummul_variance, aes(x = component, y = value, group = 1, color = component)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Principal Components", y = "Cummulative Variance explained (%)") +
+  theme_minimal()
+```
+
+### Relationship between components
+
+We can examine the correlation between components. Interesting? What is happening here? 
+
+```{r}
+pca_corr <- pca_baked |> select(!(ID))
+
+pca_corr %>% 
+  correlate() %>%
+  rearrange() %>%
+  shave()  %>%
+  rplot(print_cor=TRUE)
+```
+
+```{r}
+ggplot(pca_baked, aes(x = PC1, y = PC2)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm") +
+  labs(x = "PC1", y = "PC2") +
+  theme_minimal()
+```
+
+```{r}
+scatter_3d <- plot_ly(pca_baked, x = ~PC3, y = ~PC4, z = ~PC5, type = "scatter3d", mode = "markers",
+                  marker = list(size = 3)) %>%
+                  layout(title = "3D Scatter Plot",
+                         scene = list(xaxis = list(title = "PC3"),
+                                      yaxis = list(title = "PC4"),
+                                      zaxis = list(title = "PC5")))
+
+# Display the 3D scatter plot
+scatter_3d
+```
+
+## PCA regression
+
+PCA is a common pre-processing step in model building. We can use a PCA regression to include new created principal components as predictors in a model.
+
+### Data Split
+
+```{r}
+# Fix the random numbers by setting the seed 
+# This enables the analysis to be reproducible when random numbers are used 
+set.seed(10)
+
+data_split <- initial_split(data, prop = 0.70)
+
+# Create data frames for the two sets:
+train_data <- training(data_split)
+summary(train_data$PM_BMI_SR)
+
+test_data  <- testing(data_split)
+summary(test_data$PM_BMI_SR)
+```
+
+### Model
+
+```{r}
+linear_model <- linear_reg() %>%
+        set_engine("glm") %>%
+        set_mode("regression") 
+```
+
+### Recipe
+
+```{r}
+pca_reg_recipe <- recipe(PM_BMI_SR ~., data = train_data) %>%
+  update_role(ID, new_role = "id") %>%
+  step_scale(all_numeric_predictors()) %>%
+  step_center(all_numeric_predictors()) %>%
+  step_pca(all_numeric_predictors(), id = "pca_id")
+
+pca_reg_recipe
+```
+
+### Workflow
+
+A workflow connects our recipe with out model. The workflow let's us setup the models without actually have run things over and over again. This is helpful because as you will sometimes models can take a long time to run. 
+
+```{r}
+bmi_workflow <- 
+        workflow() %>%
+        add_model(linear_model) %>% 
+        add_recipe(pca_reg_recipe)
+
+bmi_workflow
+```
+
+### Fit a model 
+
+```{r}
+bmi_fit <- 
+  bmi_workflow %>% 
+  fit(data = train_data)
+```
+
+```{r}
+bmi_fit_extract <- bmi_fit %>% 
+                    extract_fit_parsnip() %>% 
+                    tidy()
+bmi_fit_extract
+```
+
+### Predict on new data
+
+```{r}
+bmi_predicted <- augment(bmi_fit, test_data)
+
+ggplot(bmi_predicted, aes(x = PM_BMI_SR, y = .pred)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm") +
+  labs(x = "Measured BMI", y = "Predicted BMI") +
+  theme_minimal()
+```
+
+## Tutorials
+
+* Learn Tidymodels [https://rdrr.io/github/tidymodels/learntidymodels/f/inst/tutorials/pca_recipes/pca_recipes.Rmd](https://rdrr.io/github/tidymodels/learntidymodels/f/inst/tutorials/pca_recipes/pca_recipes.Rmd)
+* R for Tidymodles [https://r4ds.github.io/bookclub-tmwr/principal-component-analysis-pca.html](https://r4ds.github.io/bookclub-tmwr/principal-component-analysis-pca.html)
+* PCA and UMAP with tidymodels and #TidyTuesday cocktail recipes [https://juliasilge.com/blog/cocktail-recipes-umap/](https://juliasilge.com/blog/cocktail-recipes-umap/)
+
+## Session Info
+
+```{r}
+sessionInfo()
+```
+
+
+
