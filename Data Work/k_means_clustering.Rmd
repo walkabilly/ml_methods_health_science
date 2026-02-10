@@ -219,19 +219,20 @@ grid <- tibble(num_clusters=1:10)
 
 The code below takes around 3 hours on a M4 Mac Mini so run with caution. 
 
-```{}
+```{r}
 tuned_model <- tune_cluster(kmodes_workflow_tune, 
                         resamples = folds, 
                         grid = grid,
                        metrics = cluster_metric_set(silhouette_avg), 
                        control = control_resamples(save_pred = TRUE, 
-                                                  verbose = TRUE)
+                                                  verbose = TRUE, 
+                                                  parallel_over = "everything")
                        )
 ```
 
 Here we see the results of all of the 20 models we ran. We can plot the silhouette score across each model to better understand which number of clusters is optimal. 
 
-```{}
+```{r}
 collect_metrics(tuned_model) %>% head()
 
 autoplot(tuned_model)

@@ -131,7 +131,7 @@ library(tidyverse)
 ```
 ## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
 ## ✔ forcats   1.0.0     ✔ stringr   1.5.2
-## ✔ lubridate 1.9.4     ✔ tibble    3.3.0
+## ✔ lubridate 1.9.4     ✔ tibble    3.3.1
 ## ✔ readr     2.1.5
 ```
 
@@ -163,7 +163,7 @@ Here are reading in data and getting organized to run our models.
 
 
 ``` r
-data <- read_csv("canpath_data.csv")
+data <- read_csv("canpath_imputed.csv")
 ```
 
 ```
@@ -442,7 +442,7 @@ data %>%
     ggpairs(aes(fill = clusters, color = clusters))
 ```
 
-![](unsupervised_learning_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
+![](k_means_clustering_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
 We can also visualize the centroid of each cluster for each variable
 
@@ -459,7 +459,7 @@ ggplot(data = centroids_long, aes(x = name, y = value, group = .cluster, color =
   theme(axis.text.x = element_text(angle=45, hjust = 1))
 ```
 
-![](unsupervised_learning_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
+![](k_means_clustering_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
 
 Here we can see that cluster 2, which is the least common with has a relatively high proportion of all disease. Cluster 3 has a high proportion of 3 diseases, `ENDO_HB_CHOL`, `NEURO_MIGRAINE`, and `SLEEP_APNEA`. 
 
@@ -496,7 +496,8 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
                         grid = grid,
                        metrics = cluster_metric_set(silhouette_avg), 
                        control = control_resamples(save_pred = TRUE, 
-                                                  verbose = TRUE)
+                                                  verbose = TRUE, 
+                                                  parallel_over = "everything")
                        )
 ```
 
@@ -521,6 +522,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
+```
+
+```
 ## i Fold1: preprocessor 1/1, model 2/10
 ```
 
@@ -530,6 +539,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold1: preprocessor 1/1, model 2/10 (predictions)
+```
+
+```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
 ```
 
 ```
@@ -545,6 +562,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
+```
+
+```
 ## i Fold1: preprocessor 1/1, model 4/10
 ```
 
@@ -554,6 +579,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold1: preprocessor 1/1, model 4/10 (predictions)
+```
+
+```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
 ```
 
 ```
@@ -569,6 +602,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
+```
+
+```
 ## i Fold1: preprocessor 1/1, model 6/10
 ```
 
@@ -578,6 +619,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold1: preprocessor 1/1, model 6/10 (predictions)
+```
+
+```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
 ```
 
 ```
@@ -593,6 +642,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
+```
+
+```
 ## i Fold1: preprocessor 1/1, model 8/10
 ```
 
@@ -605,6 +662,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
+```
+
+```
 ## i Fold1: preprocessor 1/1, model 9/10
 ```
 
@@ -614,6 +679,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold1: preprocessor 1/1, model 9/10 (predictions)
+```
+
+```
+## i Fold1: preprocessor 1/1
+```
+
+```
+## ✓ Fold1: preprocessor 1/1
 ```
 
 ```
@@ -649,6 +722,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
+```
+
+```
 ## i Fold2: preprocessor 1/1, model 2/10
 ```
 
@@ -658,6 +739,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold2: preprocessor 1/1, model 2/10 (predictions)
+```
+
+```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
 ```
 
 ```
@@ -673,6 +762,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
+```
+
+```
 ## i Fold2: preprocessor 1/1, model 4/10
 ```
 
@@ -682,6 +779,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold2: preprocessor 1/1, model 4/10 (predictions)
+```
+
+```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
 ```
 
 ```
@@ -697,6 +802,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
+```
+
+```
 ## i Fold2: preprocessor 1/1, model 6/10
 ```
 
@@ -706,6 +819,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold2: preprocessor 1/1, model 6/10 (predictions)
+```
+
+```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
 ```
 
 ```
@@ -721,6 +842,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
+```
+
+```
 ## i Fold2: preprocessor 1/1, model 8/10
 ```
 
@@ -733,6 +862,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 ```
 
 ```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
+```
+
+```
 ## i Fold2: preprocessor 1/1, model 9/10
 ```
 
@@ -742,6 +879,14 @@ tuned_model <- tune_cluster(kmodes_workflow_tune,
 
 ```
 ## i Fold2: preprocessor 1/1, model 9/10 (predictions)
+```
+
+```
+## i Fold2: preprocessor 1/1
+```
+
+```
+## ✓ Fold2: preprocessor 1/1
 ```
 
 ```
@@ -769,17 +914,17 @@ collect_metrics(tuned_model) %>% head()
 ##          <int> <chr>          <chr>        <dbl> <int>    <dbl> <chr>           
 ## 1            1 silhouette_avg standard   NaN         0 NA       Preprocessor1_M…
 ## 2            2 silhouette_avg standard     0.672     2  0.00606 Preprocessor1_M…
-## 3            3 silhouette_avg standard     0.248     2  0.0543  Preprocessor1_M…
-## 4            4 silhouette_avg standard     0.158     2  0.0243  Preprocessor1_M…
-## 5            5 silhouette_avg standard     0.126     2  0.00142 Preprocessor1_M…
-## 6            6 silhouette_avg standard     0.314     2  0.137   Preprocessor1_M…
+## 3            3 silhouette_avg standard     0.210     2  0.0120  Preprocessor1_M…
+## 4            4 silhouette_avg standard     0.181     2  0.00118 Preprocessor1_M…
+## 5            5 silhouette_avg standard     0.163     2  0.00152 Preprocessor1_M…
+## 6            6 silhouette_avg standard     0.152     2  0.0220  Preprocessor1_M…
 ```
 
 ``` r
 autoplot(tuned_model)
 ```
 
-![](unsupervised_learning_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
+![](k_means_clustering_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
 
 The silhouette plot suggests that the 5 cluster solution probably optimal. 
 
@@ -795,12 +940,12 @@ sessionInfo()
 ```
 
 ```
-## R version 4.5.1 (2025-06-13)
+## R version 4.5.2 (2025-10-31)
 ## Platform: aarch64-apple-darwin20
-## Running under: macOS Sequoia 15.7.1
+## Running under: macOS Tahoe 26.2
 ## 
 ## Matrix products: default
-## BLAS:   /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRblas.0.dylib 
+## BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib 
 ## LAPACK: /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
 ## 
 ## locale:
@@ -814,7 +959,7 @@ sessionInfo()
 ## 
 ## other attached packages:
 ##  [1] lubridate_1.9.4    forcats_1.0.0      stringr_1.5.2      readr_2.1.5       
-##  [5] tibble_3.3.0       tidyverse_2.0.0    ggmosaic_0.4.0     devtools_2.4.6    
+##  [5] tibble_3.3.1       tidyverse_2.0.0    ggmosaic_0.4.0     devtools_2.4.6    
 ##  [9] usethis_3.2.1      gtsummary_2.4.0    knitr_1.50         GGally_2.4.0      
 ## [13] klaR_1.7-3         MASS_7.3-65        ClusterR_1.3.5     tidyclust_0.2.4   
 ## [17] yardstick_1.3.2    workflowsets_1.1.1 workflows_1.3.0    tune_2.0.0        
@@ -826,39 +971,39 @@ sessionInfo()
 ## loaded via a namespace (and not attached):
 ##   [1] RColorBrewer_1.1-3  rstudioapi_0.17.1   jsonlite_2.0.0     
 ##   [4] magrittr_2.0.4      modeltools_0.2-24   farver_2.1.2       
-##   [7] rmarkdown_2.29      fs_1.6.6            vctrs_0.6.5        
+##   [7] rmarkdown_2.29      fs_1.6.6            vctrs_0.7.0        
 ##  [10] memoise_2.0.1       sparsevctrs_0.3.4   htmltools_0.5.8.1  
 ##  [13] haven_2.5.5         sass_0.4.10         parallelly_1.45.1  
 ##  [16] bslib_0.9.0         htmlwidgets_1.6.4   plyr_1.8.9         
 ##  [19] plotly_4.11.0       cachem_1.1.0        iterators_1.0.14   
-##  [22] mime_0.13           lifecycle_1.0.4     pkgconfig_2.0.3    
-##  [25] Matrix_1.7-3        R6_2.6.1            fastmap_1.2.0      
-##  [28] future_1.67.0       shiny_1.11.1        digest_0.6.37      
+##  [22] mime_0.13           lifecycle_1.0.5     pkgconfig_2.0.3    
+##  [25] Matrix_1.7-4        R6_2.6.1            fastmap_1.2.0      
+##  [28] future_1.67.0       shiny_1.11.1        digest_0.6.39      
 ##  [31] furrr_0.3.1         pkgload_1.4.1       philentropy_0.9.0  
 ##  [34] labeling_0.4.3      productplots_0.1.2  timechange_0.3.0   
-##  [37] httr_1.4.7          compiler_4.5.1      remotes_2.5.0      
+##  [37] httr_1.4.7          compiler_4.5.2      remotes_2.5.0      
 ##  [40] bit64_4.6.0-1       withr_3.0.2         S7_0.2.0           
 ##  [43] backports_1.5.0     ggstats_0.11.0      pkgbuild_1.4.8     
 ##  [46] highr_0.11          lava_1.8.1          sessioninfo_1.2.3  
-##  [49] tools_4.5.1         otel_0.2.0          flexclust_1.5.0    
+##  [49] tools_4.5.2         otel_0.2.0          flexclust_1.5.0    
 ##  [52] httpuv_1.6.16       future.apply_1.20.0 nnet_7.3-20        
 ##  [55] glue_1.8.0          questionr_0.8.1     promises_1.4.0     
-##  [58] grid_4.5.1          modelenv_0.2.0      cluster_2.1.8.1    
+##  [58] grid_4.5.2          modelenv_0.2.0      cluster_2.1.8.1    
 ##  [61] generics_0.1.4      gtable_0.3.6        labelled_2.15.0    
-##  [64] tzdb_0.5.0          class_7.3-23        data.table_1.17.8  
-##  [67] hms_1.1.3           utf8_1.2.6          foreach_1.5.2      
+##  [64] tzdb_0.5.0          class_7.3-23        data.table_1.18.0  
+##  [67] hms_1.1.4           utf8_1.2.6          foreach_1.5.2      
 ##  [70] ggrepel_0.9.6       pillar_1.11.1       vroom_1.6.5        
-##  [73] later_1.4.4         splines_4.5.1       lhs_1.2.0          
+##  [73] later_1.4.4         splines_4.5.2       lhs_1.2.0          
 ##  [76] lattice_0.22-7      bit_4.6.0           survival_3.8-3     
 ##  [79] gmp_0.7-5           tidyselect_1.2.1    miniUI_0.1.2       
-##  [82] stats4_4.5.1        xfun_0.53           hardhat_1.4.2      
+##  [82] stats4_4.5.2        xfun_0.53           hardhat_1.4.2      
 ##  [85] timeDate_4041.110   stringi_1.8.7       DiceDesign_1.10    
 ##  [88] lazyeval_0.2.2      yaml_2.3.10         evaluate_1.0.5     
 ##  [91] codetools_0.2-20    cli_3.6.5           rpart_4.1.24       
-##  [94] xtable_1.8-4        jquerylib_0.1.4     Rcpp_1.1.0         
-##  [97] globals_0.18.0      parallel_4.5.1      ellipsis_0.3.2     
+##  [94] xtable_1.8-4        jquerylib_0.1.4     Rcpp_1.1.1         
+##  [97] globals_0.18.0      parallel_4.5.2      ellipsis_0.3.2     
 ## [100] gower_1.0.2         GPfit_1.0-9         listenv_0.9.1      
 ## [103] viridisLite_0.4.2   ipred_0.9-15        prodlim_2025.04.28 
-## [106] crayon_1.5.3        combinat_0.0-8      rlang_1.1.6
+## [106] crayon_1.5.3        combinat_0.0-8      rlang_1.1.7
 ```
 
