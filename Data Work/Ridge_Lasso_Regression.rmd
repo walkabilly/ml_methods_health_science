@@ -1,0 +1,307 @@
+---
+title: "Ridge & Lasso Regression"
+output:
+  html_document: default
+  pdf_document: default
+date: "2026-01-06"
+---
+
+# Ridge and lasso regression
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidymodels)
+library(sjPlot)
+library(psych)
+library(parallel)
+library(finalfit)
+library(gtsummary)
+library(mlbench)
+library(vip)
+library(rsample)
+library(tune)
+library(recipes)
+library(yardstick)
+library(parsnip)
+library(glmnet)
+library(themis)
+library(corrr)
+library(performance)
+library(utils)
+
+data <- read_csv("canpath_imputed.csv")
+```
+
+## Linear Regression
+
+A linear regression is a type of regression where the outcome variable is continuous and we assume it has a normal distribution. 
+
+#### Feature selection
+
+Feature selection is an important topic in ML because good predictor requires many features that are able to predict unique aspects of the outcome variable. 
+
+## Research question and data
+
+Our research question is:  
+
+**What factors are associated with BMI?**
+
+We have already worked on the imputed data from the missing data class so we are going to use that imputed data here as a starting point for the work. This is partly to save time for the teaching part of the class. Remember from the missing data class that ideally we would
+
+1. Conduct sensitivity analyses with a number of different imputation methods. 
+2. Account for uncertainty using pooled models. 
+
+We are going to skip that for now but I will show an example of how `tidymodels` imputes data later in this doc. 
+
+#### Outcome variable
+
+Let's look at the outcome variable, recode, and drop observations that are not relevant. We need to do a histogram and check the distribution. Then we might deal with outliers.  
+
+```{r}
+summary(data$PM_BMI_SR)
+
+bmi_histogram <- ggplot(data = data, aes(PM_BMI_SR)) +
+                  geom_histogram(binwidth = 2)
+plot(bmi_histogram)
+```
+
+Nice normal(ish) distribution here. We probably have some outliers on the low and high end with values of 8.86 and 69.40 
+
+We can recode people who are less than 10 and greater than 60 to values of 10 and 60 respectively. 
+
+```{r}
+data <- data %>%
+          mutate(bmi_recode = case_when(
+            PM_BMI_SR < 10 ~ 10, 
+            PM_BMI_SR > 60 ~ 60,
+            TRUE ~ PM_BMI_SR
+          ))
+summary(data$bmi_recode)
+
+bmi_recode_histogram <- ggplot(data = data, aes(bmi_recode)) +
+                  geom_histogram(binwidth = 2)
+plot(bmi_recode_histogram)
+```
+
+### Preparing predictor variables
+
+All of the predictors are coded as 0,1,2 are read in as numeric by R so we need to fix that. We could manually fix each variable but we are going to do something a bit different. All of the `_EVER` variables are coded as
+
+    * 0 Never had disease
+    * 1 Ever had disease
+    * 2 Presumed - Never had disease
+    * -7 Not Applicable
+
+We can batch recode all of these variables and make sure that they are factor and not numeric.
+
+```{r}
+data <- data %>% mutate_at(3, factor)
+data <- data %>% mutate_at(5:6, factor)
+data <- data %>% mutate_at(8:12, factor)
+data <- data %>% mutate_at(15:81, factor)
+data <- data %>% mutate_at(83:93, factor)
+```
+
+## Recoding
+
+**Age**
+
+```{r}
+summary(data$SDC_AGE_CALC) 
+
+### Checking NA
+
+data %>% summarise(
+                  n = n_distinct(SDC_AGE_CALC),
+                  na = sum(is.na(SDC_AGE_CALC)
+                           ))
+
+```
+
+**Income**
+
+```{r}
+glimpse(data$SDC_INCOME)
+
+table(data$SDC_INCOME)
+
+data <- data %>%
+	mutate(income_recode = case_when(
+		SDC_INCOME == 1 ~ "Less than 25 000 $",
+		SDC_INCOME == 2 ~ "Less than 25 000 $",
+		SDC_INCOME == 3 ~ "25 000 $ - 49 999 $",
+		SDC_INCOME == 4 ~ "50 000 $ - 74 999 $",
+		SDC_INCOME == 5 ~ "75 000 $ - 99 999 $",
+		SDC_INCOME == 6 ~ "100 000 $ - 149 999 $",		
+		SDC_INCOME == 7 ~ "150 000 $ - 199 999 $",
+		SDC_INCOME == 8 ~ "200 000 $ or more"
+	))
+
+glimpse(data$income_recode)
+
+data$income_recode <- as_factor(data$income_recode)
+
+data$income_recode <- fct_relevel(data$income_recode, "Less than 25 000 $", 
+                                                          "25 000 $ - 49 999 $",
+                                                          "50 000 $ - 74 999 $",
+                                                          "75 000 $ - 99 999 $",
+                                                          "100 000 $ - 149 999 $",
+                                                          "150 000 $ - 199 999 $",
+                                                          "200 000 $ or more"
+                                          )
+table(data$income_recode)
+
+table(data$income_recode, data$SDC_INCOME)
+```
+
+We have run basic model with all variables but maybe that's too slow and maybe it's overfitting the data and we want to use a different approach for model selection. We can use ridge and lasso regression (as discussed in the slides). We already have our workflow and recipe from tidymodels so all we need to change is your regression part of the tidymodels section and we run a ridge regression. We can't use `glm` for the this as it does not support these methods. We need to change the engine to `glmnet`. 
+
+### BMI recipe
+
+```{r}
+# Fix the random numbers by setting the seed 
+# This enables the analysis to be reproducible when random numbers are used 
+set.seed(10)
+
+data_split <- initial_split(data, prop = 0.70)
+
+# Create data frames for the two sets:
+train_data <- training(data_split)
+summary(train_data$bmi_recode)
+
+test_data  <- testing(data_split)
+summary(test_data$bmi_recode)
+
+bmi_recipe <- 
+  recipe(bmi_recode ~ ., data = train_data) %>% 
+  update_role(ADM_STUDY_ID, new_role = "ID") %>% 
+  step_normalize(all_numeric_predictors()) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_zv(all_predictors()) 
+
+summary(bmi_recipe)
+```
+
+The tuning parameter for the ridge regression is known has a __hyperparameter__. Different types of ML models will have different hyperparameters that you need to tune to make sure that they are optimized for your model. 
+
+Here sort of randomly set the penalty for the ridge model but that's just to give us an example. We will tune the penalty a bit later. The code for this is mostly based from [https://juliasilge.com/blog/lasso-the-office/](https://juliasilge.com/blog/lasso-the-office/) this tutorial, with some modifications for explanability and because some functions are depricated. 
+
+
+```{r}
+ridge_model <- linear_reg(penalty = 0.1, mixture = 0) %>%  ### mixture = 0 is ridge, mixture = 1 is lasso. 
+  set_engine("glmnet")
+
+ridge_workflow <- workflow() %>%
+  add_recipe(bmi_recipe)
+
+ridge_fit <- ridge_workflow %>%
+  add_model(ridge_model) %>%
+  fit(data = train_data)
+
+ridge_fit %>%
+        extract_fit_parsnip() %>%
+        tidy()
+```
+
+### Tunning the penalty. 
+
+So we fit one lasso model, but how do we know the right regularization parameter penalty? We can figure that out using resampling and tuning the model. Let’s build a set of bootstrap resamples, and set penalty = tune() instead of to a single value. We can use a function penalty() to set up an appropriate grid for this kind of regularization model.
+
+First, we need to setup the bootstrap for the training data to be able to easily run multiple iterations of the model. Here instead of giving a fixed penalty value `penalty = 0.1` like we did above. We are going to get that value to `tune()` so we can run a number of different iterations of the penatly value and see which one is best. We are going to use a regular grid for this with 25 different iterations of the tuning. 
+
+```{r}
+set.seed(123)
+data_boot <- bootstraps(train_data)
+
+tune_penalty_ridge <- linear_reg(penalty = tune(), mixture = 0) %>%
+  set_engine("glmnet")
+
+lambda_grid <- grid_regular(penalty(), levels = 25) 
+```
+
+Here we are going to run the model 25 times with different penalty values. That's computationally expenvise so let's do this in parallel. 
+
+```{r}
+detectCores()
+doParallel::registerDoParallel()
+
+set.seed(123)
+ridge_grid_tune <- tune_grid(
+                ridge_workflow %>% 
+                  add_model(tune_penalty_ridge),
+                  resamples = data_boot,
+                  grid = lambda_grid
+                )
+```
+
+Let's pull the results and see what we get
+
+```{r}
+ridge_grid_tune %>%
+  collect_metrics()
+```
+
+We can visualize the tuning based on this code 
+
+```{r}
+ridge_grid_tune %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_line(linewidth = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_continuous(labels = ~ format(.x, scientific = FALSE))
+  theme(legend.position = "none")
+```
+
+We can see from the models that the models are getting better with more penalty. The best models have a penalty close to 1. We can get the results of the best models in terms of penalty by lowest RMSE and and rerun the model again with only that model with the lowest RMSE. 
+
+```{r}
+lowest_rmse_ridge <- ridge_grid_tune %>%
+                        select_best(metric = "rmse")
+lowest_rmse_ridge
+
+final_ridge_model_workflow <- finalize_workflow(
+                    ridge_workflow %>% 
+                    add_model(tune_penalty_ridge),
+                    lowest_rmse_ridge
+                  )
+
+final_ridge_model_workflow
+```
+
+### Variable importance 
+
+```{r}
+final_ridge_model <- final_ridge_model_workflow %>%
+                        fit(data = train_data)
+
+final_ridge_model %>%
+        extract_fit_parsnip() %>%
+        tidy()
+
+vip(final_ridge_model, num_features = 20)
+```
+
+### Final model on testing data 
+
+let’s return to our test data. The tune package has a function last_fit() which is nice for situations when you have tuned and finalized a model or workflow and want to fit it one last time on your training data and evaluate it on your testing data. You only have to pass this function your finalized model/workflow and your split. As we pass it the split object from the start of our code we get two processes for the price of one. We train/fit our selected model on 100% of Train and then it automatically scores up the Test set with the newly created, final model. 
+
+```{r}
+last_fit_ridge <- last_fit(final_ridge_model_workflow, data_split)  %>%
+                    collect_metrics()
+last_fit_ridge
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
+```
+
