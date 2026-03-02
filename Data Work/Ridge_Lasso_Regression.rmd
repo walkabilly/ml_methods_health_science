@@ -1,12 +1,12 @@
 ---
 title: "Ridge & Lasso Regression"
 output:
-  html_document: default
-  pdf_document: default
+      html_document:
+        keep_md: true
 date: "2026-01-06"
 ---
 
-# Ridge and lasso regression
+# Ridge and lasso regression with bootstrap
 
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
@@ -155,6 +155,12 @@ table(data$income_recode)
 table(data$income_recode, data$SDC_INCOME)
 ```
 
+### Some final data organizing
+
+```{r}
+data$PM_BMI_SR <- NULL
+```
+
 We have run basic model with all variables but maybe that's too slow and maybe it's overfitting the data and we want to use a different approach for model selection. We can use ridge and lasso regression (as discussed in the slides). We already have our workflow and recipe from tidymodels so all we need to change is your regression part of the tidymodels section and we run a ridge regression. We can't use `glm` for the this as it does not support these methods. We need to change the engine to `glmnet`. 
 
 ### BMI recipe
@@ -173,12 +179,12 @@ summary(train_data$bmi_recode)
 test_data  <- testing(data_split)
 summary(test_data$bmi_recode)
 
-bmi_recipe <- 
-  recipe(bmi_recode ~ ., data = train_data) %>% 
+bmi_recipe <- recipe(bmi_recode ~ ., data = train_data) %>% 
   update_role(ADM_STUDY_ID, new_role = "ID") %>% 
+  update_role(ID, new_role = "ID") %>% 
   step_normalize(all_numeric_predictors()) %>% 
   step_dummy(all_nominal_predictors()) %>% 
-  step_zv(all_predictors()) 
+  step_zv(all_predictors())
 
 summary(bmi_recipe)
 ```
@@ -193,7 +199,7 @@ ridge_model <- linear_reg(penalty = 0.1, mixture = 0) %>%  ### mixture = 0 is ri
   set_engine("glmnet")
 
 ridge_workflow <- workflow() %>%
-  add_recipe(bmi_recipe)
+  add_recipe(bmi_recipe) 
 
 ridge_fit <- ridge_workflow %>%
   add_model(ridge_model) %>%
@@ -208,69 +214,95 @@ ridge_fit %>%
 
 So we fit one lasso model, but how do we know the right regularization parameter penalty? We can figure that out using resampling and tuning the model. Let’s build a set of bootstrap resamples, and set penalty = tune() instead of to a single value. We can use a function penalty() to set up an appropriate grid for this kind of regularization model.
 
-First, we need to setup the bootstrap for the training data to be able to easily run multiple iterations of the model. Here instead of giving a fixed penalty value `penalty = 0.1` like we did above. We are going to get that value to `tune()` so we can run a number of different iterations of the penatly value and see which one is best. We are going to use a regular grid for this with 25 different iterations of the tuning. 
+First, we need to setup the bootstrap for the training data to be able to easily run multiple iterations of the model. Here instead of giving a fixed penalty value `penalty = 0.1` like we did above. We are going to get that value to `tune()` so we can run a number of different iterations of the penatly value and see which one is best. We are going to use a regular grid for this with 4 different iterations of the tuning. Normally, you would run more than 4 iterations but just showing as an example that runs relatively quickly. 
 
 ```{r}
 set.seed(123)
-data_boot <- bootstraps(train_data)
+data_boot <- bootstraps(train_data, times = 4)
 
-tune_penalty_ridge <- linear_reg(penalty = tune(), mixture = 0) %>%
-  set_engine("glmnet")
-
-lambda_grid <- grid_regular(penalty(), levels = 25) 
+lm_mixture <- linear_reg(
+                mode = "regression",
+                engine = "glmnet",
+                penalty = tune(),
+                mixture = tune()
+              )
 ```
 
-Here we are going to run the model 25 times with different penalty values. That's computationally expenvise so let's do this in parallel. 
+Here we are going to run the model 4 times with different penalty values. That's computationally expensive so let's do this in parallel. 
 
 ```{r}
+### This takes around 45minutes to run on my 8core computer
+
 detectCores()
 doParallel::registerDoParallel()
 
 set.seed(123)
-ridge_grid_tune <- tune_grid(
-                ridge_workflow %>% 
-                  add_model(tune_penalty_ridge),
-                  resamples = data_boot,
-                  grid = lambda_grid
-                )
+
+bmi_wflow_boots <- workflow() %>% 
+          add_model(lm_mixture) %>% 
+          add_recipe(bmi_recipe) %>% 
+          tune_grid(resamples = data_boot,
+                    control = control_grid(save_pred = TRUE, 
+                                            verbose = FALSE)) ## Edit for running live
+
+collect_metrics(bmi_wflow_boots) 
+
+show_best(bmi_wflow_boots, metric='rmse', n=5)  # only show the results for the best 5 models
+```
+
+### Plotting
+
+```{r}
+autoplot(bmi_wflow_boots, metric = 'rmse') 
+
+bmi_wflow_boots %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  mutate(penalty = factor(penalty)) %>%
+  ggplot(aes(mixture, mean, color = mixture)) +
+  geom_line(alpha = 0.5, size = 1.5) +
+  geom_point() +
+  labs(y = "Root Mean Square Error")
+```
+
+```{r}
+ridge_lasso_best <- 
+  bmi_wflow_boots %>% 
+  select_best(metric = "rmse")
+
+ridge_lasso_best
 ```
 
 Let's pull the results and see what we get
 
 ```{r}
-ridge_grid_tune %>%
-  collect_metrics()
+boot_tuned_results <- 
+  bmi_wflow_boots %>% 
+  collect_predictions(parameters = ridge_lasso_best) 
 ```
 
-We can visualize the tuning based on this code 
+### Final Model
+
+Final model
+
+Above we are looking at our trained model over the cross-validation sets. We have not actually tested our model on our test data. To run the last model we need to back to our workflow and use the last_fit function. Note that we use the cv_split object rather than the train or test data objects. This will will fit the model to the entire training set and evaluate it with the testing set. We need to back to our workflow object (somewhat counter intuitive).
 
 ```{r}
-ridge_grid_tune %>%
-  collect_metrics() %>%
-  ggplot(aes(penalty, mean, color = .metric)) +
-  geom_errorbar(aes(
-    ymin = mean - std_err,
-    ymax = mean + std_err
-  ),
-  alpha = 0.5
-  ) +
-  geom_line(linewidth = 1.5) +
-  facet_wrap(~.metric, scales = "free", nrow = 2) +
-  scale_x_continuous(labels = ~ format(.x, scientific = FALSE))
-  theme(legend.position = "none")
-```
+lm_mixture_best <- linear_reg(
+                mode = "regression",
+                engine = "glmnet",
+                penalty = 0.0774,
+                mixture = 0.261
+              )
 
-We can see from the models that the models are getting better with more penalty. The best models have a penalty close to 1. We can get the results of the best models in terms of penalty by lowest RMSE and and rerun the model again with only that model with the lowest RMSE. 
+bmi_wflow_best <- workflow() %>% 
+          add_model(lm_mixture_best) %>% 
+          add_recipe(bmi_recipe) 
 
-```{r}
-lowest_rmse_ridge <- ridge_grid_tune %>%
-                        select_best(metric = "rmse")
-lowest_rmse_ridge
 
 final_ridge_model_workflow <- finalize_workflow(
-                    ridge_workflow %>% 
-                    add_model(tune_penalty_ridge),
-                    lowest_rmse_ridge
+                    bmi_wflow_best,
+                    ridge_lasso_best
                   )
 
 final_ridge_model_workflow
