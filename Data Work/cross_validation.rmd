@@ -1,0 +1,319 @@
+---
+title: "Cross-Validation"
+output:
+      html_document:
+        keep_md: true
+date: "2026-01-06"
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidymodels)
+library(sjPlot)
+library(psych)
+library(parallel)
+library(finalfit)
+library(gtsummary)
+library(mlbench)
+library(vip)
+library(rsample)
+library(tune)
+library(recipes)
+library(yardstick)
+library(parsnip)
+library(glmnet)
+library(themis)
+library(corrr)
+library(performance)
+library(utils)
+
+data <- read_csv("canpath_imputed.csv")
+```
+
+## Linear Regression
+
+A linear regression is a type of regression where the outcome variable is continuous and we assume it has a normal distribution. 
+
+#### Feature selection
+
+Feature selection is an important topic in ML because good predictor requires many features that are able to predict unique aspects of the outcome variable. 
+
+## Research question and data
+
+Our research question is:  
+
+**What factors are associated with BMI?**
+
+We have already worked on the imputed data from the missing data class so we are going to use that imputed data here as a starting point for the work. This is partly to save time for the teaching part of the class. Remember from the missing data class that ideally we would
+
+1. Conduct sensitivity analyses with a number of different imputation methods. 
+2. Account for uncertainty using pooled models. 
+
+We are going to skip that for now but I will show an example of how `tidymodels` imputes data later in this doc. 
+
+#### Outcome variable
+
+Let's look at the outcome variable, recode, and drop observations that are not relevant. We need to do a histogram and check the distribution. Then we might deal with outliers.  
+
+```{r}
+summary(data$PM_BMI_SR)
+
+bmi_histogram <- ggplot(data = data, aes(PM_BMI_SR)) +
+                  geom_histogram(binwidth = 2)
+plot(bmi_histogram)
+```
+
+Nice normal(ish) distribution here. We probably have some outliers on the low and high end with values of 8.86 and 69.40 
+
+We can recode people who are less than 10 and greater than 60 to values of 10 and 60 respectively. 
+
+```{r}
+data <- data %>%
+          mutate(bmi_recode = case_when(
+            PM_BMI_SR < 10 ~ 10, 
+            PM_BMI_SR > 60 ~ 60,
+            TRUE ~ PM_BMI_SR
+          ))
+summary(data$bmi_recode)
+
+bmi_recode_histogram <- ggplot(data = data, aes(bmi_recode)) +
+                  geom_histogram(binwidth = 2)
+plot(bmi_recode_histogram)
+```
+
+### Preparing predictor variables
+
+All of the predictors are coded as 0,1,2 are read in as numeric by R so we need to fix that. We could manually fix each variable but we are going to do something a bit different. All of the `_EVER` variables are coded as
+
+    * 0 Never had disease
+    * 1 Ever had disease
+    * 2 Presumed - Never had disease
+    * -7 Not Applicable
+
+We can batch recode all of these variables and make sure that they are factor and not numeric.
+
+```{r}
+data <- data %>% mutate_at(3, factor)
+data <- data %>% mutate_at(5:6, factor)
+data <- data %>% mutate_at(8:12, factor)
+data <- data %>% mutate_at(15:81, factor)
+data <- data %>% mutate_at(83:93, factor)
+```
+
+## Recoding
+
+**Age**
+
+```{r}
+summary(data$SDC_AGE_CALC) 
+
+### Checking NA
+
+data %>% summarise(
+                  n = n_distinct(SDC_AGE_CALC),
+                  na = sum(is.na(SDC_AGE_CALC)
+                           ))
+
+```
+
+**Income**
+
+```{r}
+glimpse(data$SDC_INCOME)
+
+table(data$SDC_INCOME)
+
+data <- data %>%
+	mutate(income_recode = case_when(
+		SDC_INCOME == 1 ~ "Less than 25 000 $",
+		SDC_INCOME == 2 ~ "Less than 25 000 $",
+		SDC_INCOME == 3 ~ "25 000 $ - 49 999 $",
+		SDC_INCOME == 4 ~ "50 000 $ - 74 999 $",
+		SDC_INCOME == 5 ~ "75 000 $ - 99 999 $",
+		SDC_INCOME == 6 ~ "100 000 $ - 149 999 $",		
+		SDC_INCOME == 7 ~ "150 000 $ - 199 999 $",
+		SDC_INCOME == 8 ~ "200 000 $ or more"
+	))
+
+glimpse(data$income_recode)
+
+data$income_recode <- as_factor(data$income_recode)
+
+data$income_recode <- fct_relevel(data$income_recode, "Less than 25 000 $", 
+                                                          "25 000 $ - 49 999 $",
+                                                          "50 000 $ - 74 999 $",
+                                                          "75 000 $ - 99 999 $",
+                                                          "100 000 $ - 149 999 $",
+                                                          "150 000 $ - 199 999 $",
+                                                          "200 000 $ or more"
+                                          )
+table(data$income_recode)
+
+table(data$income_recode, data$SDC_INCOME)
+```
+
+### Some final data organizing
+
+```{r}
+data$PM_BMI_SR <- NULL
+```
+
+## Cross validation 
+
+So we know that the up-scaling worked well to improve the model. Another thing we always want to test with an ML model is using a different type of resampling (validation) approach. Originally, we used a 70/30 split in the data, which is not the optimal approach. A better general approach is k-fold cross validation. This approach is very common. There is some discussion of a bunch of other approaches here [https://www.stepbystepdatascience.com/ml-with-tidymodels](https://www.stepbystepdatascience.com/ml-with-tidymodels).
+
+Here we will use our new up-scaled data and apply 10 fold cross-validation approach. We have already set the seed for the analysis in line 105. Setting that will make sure that we get a reproducible result. This resmapling approach 
+
+![](https://static.wixstatic.com/media/ea0077_8bf9cf19b5ce4f24816ac8d7a1da00fd~mv2.png/v1/fill/w_804,h_452,al_c,q_90,usm_0.66_1.00_0.01,enc_auto/Resampling_PNG.png)
+
+### BMI recipe
+
+```{r}
+# Fix the random numbers by setting the seed 
+# This enables the analysis to be reproducible when random numbers are used 
+set.seed(10)
+
+data_split <- initial_split(data, prop = 0.70)
+
+# Create data frames for the two sets:
+train_data <- training(data_split)
+summary(train_data$bmi_recode)
+
+test_data  <- testing(data_split)
+summary(test_data$bmi_recode)
+
+bmi_recipe <- 
+  recipe(bmi_recode ~ ., data = train_data) %>% 
+  update_role(ADM_STUDY_ID, new_role = "ID") %>% 
+  update_role(ID, new_role = "ID") %>% 
+  step_normalize(all_numeric_predictors()) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_zv(all_predictors()) 
+
+summary(bmi_recipe)
+```
+
+### 
+
+```{r}
+lm_mixture <- linear_reg(
+                mode = "regression",
+                engine = "glmnet",
+                penalty = tune(),
+                mixture = tune()
+              )
+```
+
+### 5 fold cross validation
+
+```{r, messages = FALSE}
+folds <- vfold_cv(train_data, v = 5) ## normally you would do at least 10 folds. Just doing 5 because it's faster.
+```
+
+```{r}
+detectCores()
+doParallel::registerDoParallel()
+
+set.seed(123)
+
+bmi_wflow_folds <- workflow() %>% 
+          add_model(lm_mixture) %>% 
+          add_recipe(bmi_recipe) %>% 
+          tune_grid(resamples = folds,
+                    control = control_grid(save_pred = TRUE, 
+                                            verbose = FALSE)) ## Edit for running live
+
+collect_metrics(bmi_wflow_folds) 
+
+show_best(bmi_wflow_folds, metric='rmse', n=5)  # only show the results for the best 5 models
+
+autoplot(bmi_wflow_folds, metric = 'rmse') 
+```
+
+### Plotting
+
+```{r}
+autoplot(bmi_wflow_folds, metric = 'rmse') 
+
+bmi_wflow_folds %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  mutate(penalty = factor(penalty)) %>%
+  ggplot(aes(mixture, mean, color = mixture)) +
+  geom_line(alpha = 0.5, size = 1.5) +
+  geom_point() +
+  labs(y = "Root Mean Square Error")
+```
+
+```{r}
+ridge_lasso_best <- 
+  bmi_wflow_folds %>% 
+  select_best(metric = "rmse")
+
+ridge_lasso_best
+```
+
+Let's pull the results and see what we get
+
+```{r}
+boot_tuned_results <- 
+  bmi_wflow_folds %>% 
+  collect_predictions(parameters = ridge_lasso_best) 
+```
+
+### Final Model
+
+Final model
+
+Above we are looking at our trained model over the cross-validation sets. We have not actually tested our model on our test data. To run the last model we need to back to our workflow and use the last_fit function. Note that we use the cv_split object rather than the train or test data objects. This will will fit the model to the entire training set and evaluate it with the testing set. We need to back to our workflow object (somewhat counter intuitive).
+
+```{r}
+lm_mixture_best <- linear_reg(
+                mode = "regression",
+                engine = "glmnet",
+                penalty = 0.0774,
+                mixture = 0.261
+              )
+
+bmi_wflow_best <- workflow() %>% 
+          add_model(lm_mixture_best) %>% 
+          add_recipe(bmi_recipe) 
+
+
+final_ridge_model_workflow <- finalize_workflow(
+                    bmi_wflow_best,
+                    ridge_lasso_best
+                  )
+
+final_ridge_model_workflow
+```
+
+### Variable importance 
+
+```{r}
+final_ridge_model <- final_ridge_model_workflow %>%
+                        fit(data = train_data)
+
+final_ridge_model %>%
+        extract_fit_parsnip() %>%
+        tidy()
+
+vip(final_ridge_model, num_features = 20)
+```
+
+### Final model on testing data 
+
+let’s return to our test data. The tune package has a function last_fit() which is nice for situations when you have tuned and finalized a model or workflow and want to fit it one last time on your training data and evaluate it on your testing data. You only have to pass this function your finalized model/workflow and your split. As we pass it the split object from the start of our code we get two processes for the price of one. We train/fit our selected model on 100% of Train and then it automatically scores up the Test set with the newly created, final model. 
+
+```{r}
+last_fit_ridge <- last_fit(final_ridge_model_workflow, data_split)  %>%
+                    collect_metrics()
+last_fit_ridge
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
+```
