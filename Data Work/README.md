@@ -9,7 +9,7 @@
 | 5    | February 3  | [Principal Component Analysis](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/principal_component_analysis.md)                                           |
 | 6    | February 10 | [Clustering Methods](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/k_means_clustering.md)                                                     |
 | 7    | February 17 | Reading Week                                           |                                                                        
-| 8    | February 24 | Cross Validation + Bootstrapping – Applications with Linear Regression |
+| 8    | February 24 | [ElasticNet Regression with Bootsrap](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/Ridge_Lasso_Regression.md) & [Cross Validation]() |
 | 9    | March 3     | Random Forest                                      |
 | 10   | March 17    | Causal Forest + Matching                                               |
 | 11   | March 24    | Artificial Neural Networks                                             |
