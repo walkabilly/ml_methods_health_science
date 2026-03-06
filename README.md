@@ -117,10 +117,10 @@ The CanPath Student Dataset is available to instructors at a Canadian university
 | 7    | February 17 | Reading Week                                           |                                                                        |
 | 8    | February 24 | Validation – Cross Validation + Bootstrapping          | Cross Validation + Bootstrapping – Applications with Linear Regression |
 | 9    | March 3     | Ensemble Methods – Random Forest                       | Random Forest                                        |
-| 10   | March 17    | Causal Inference – Causal Forest                       | Causal Forest + Matching                                               |
-| 11   | March 24    | Ensemble Methods – Artificial Neural Networks          | Artificial Neural Networks                                             |
-| 12   | March 31    | Ensemble Methods – Transformers/Self-Supervised Learning | Artificial Neural Networks Part 2                                      |
-| 13   | April 7     | Scientific Computing                                   | Scientific Computing + Full ML Implementation                          |
+| 10   | March 10    | Causal Inference – Causal Forest                       | Causal Forest + Matching                                               |
+| 11   | March 17    | Ensemble Methods – Artificial Neural Networks          | Artificial Neural Networks                                             |
+| 12   | March 24    | Ensemble Methods – Transformers/Self-Supervised Learning | Artificial Neural Networks Part 2                                      |
+| 13   | March 31     | Scientific Computing                                   | Scientific Computing + Full ML Implementation                          |
 
 * Subject to change depending on speed
 
