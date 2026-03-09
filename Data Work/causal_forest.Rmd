@@ -1,0 +1,250 @@
+---
+title: "Causal Forest"
+author: "Daniel Fuller"
+date: "2024-09-23"
+output:
+      html_document:
+        keep_md: true
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(grf)
+library(tidyverse)
+library(reshape2)
+library(reportRmd)
+```
+
+# Causal Forest
+
+## Research question and data
+
+Here we are going to generate data based on the example provided [here](https://kamran-afzali.github.io/Bookdown_Causality/causal-forests.html#precision-medicine-case-study-personalized-diabetes-treatment). Often for causal inference types of questions it's good to generate data because we can have known treatment effects and compare model performance to those known treatment effects. Without known treatment effects, it's hard to evaluated if the model is performing well... and causality is hard. 
+
+Our analysis aims to develop personalized treatment recommendations by estimating conditional treatment effects as functions of age, BMI, baseline HbA1c levels, and comorbidity indicators including hypertension, cardiovascular disease, and kidney disease. The outcome is change in HbA1c levels after six months, where more negative values indicate better glycemic control.
+
+### Generating synthetic data
+
+```{r}
+data <- read_csv("causal_forest_data.csv")
+```
+
+This is the code to generate the data. We will review this in class. 
+
+```{}
+# Set seed for reproducible results
+set.seed(123)
+
+# Simulate realistic patient population
+n <- 3000
+
+# Generate patient characteristics with realistic distributions
+age <- pmax(25, pmin(85, rnorm(n, 60, 12)))  # Age 25-85, mean 60
+bmi <- pmax(20, pmin(50, rnorm(n, 30, 6)))   # BMI 20-50, mean 30
+baseline_hba1c <- pmax(6.0, pmin(12.0, rnorm(n, 8.5, 1.2)))  # HbA1c 6-12%, mean 8.5%
+
+# Binary comorbidity indicators
+hypertension <- rbinom(n, 1, 0.6)     # 60% prevalence
+cvd <- rbinom(n, 1, 0.3)              # 30% prevalence  
+kidney_disease <- rbinom(n, 1, 0.25)  # 25% prevalence
+
+# Combine covariates into matrix
+X <- cbind(age, bmi, baseline_hba1c, hypertension, cvd, kidney_disease)
+colnames(X) <- c("age", "bmi", "baseline_hba1c", "hypertension", "cvd", "kidney_disease")
+
+# Randomized treatment assignment
+W <- rbinom(n, 1, 0.5)
+
+# Generate heterogeneous treatment effects
+# Younger patients and those with worse baseline control benefit more
+true_tau <- -0.5 - 0.02 * (age - 60) - 0.3 * (baseline_hba1c - 8.5)
+true_tau <- pmax(-2.5, pmin(0, true_tau))  # Constrain to realistic range
+
+# Generate outcomes under potential outcomes framework
+Y0 <- -0.3 + 0.01 * age + 0.02 * bmi + 0.1 * baseline_hba1c + 
+      0.2 * hypertension + 0.15 * cvd + 0.25 * kidney_disease + rnorm(n, 0, 0.8)
+
+Y1 <- Y0 + true_tau + rnorm(n, 0, 0.3)
+
+# Observed outcomes
+Y <- W * Y1 + (1 - W) * Y0
+
+# Create dataset
+data <- data.frame(X, treatment = W, Y = Y, true_tau = true_tau)
+
+write_csv(data, "causal_forest_data.csv")
+```
+
+## Descriptive statistics
+
+```{r}
+glimpse(data)
+
+rm_covsum(data=data, maincov = 'treatment',
+covs=c('Y','true_tau', 'baseline_hba1c', 'age'), show.tests=FALSE, pvalue = FALSE)
+```
+
+## Causal Forest
+
+Fitting the causal forest model. Here we are running with non-tuned hyper-parameters. Tuning later. Reminder that we are outside of the world of tidymodels. 
+
+```{r}
+Y <- data$Y
+treatment <- data$treatment
+X <- cbind(data$age, data$bmi, data$baseline_hba1c, data$hypertension, data$cvd, data$kidney_disease) ## Covariate Matrix
+
+
+cause_forest_m1 <- causal_forest(X, Y, treatment,
+                    num.trees = 2000,        # Sufficient for stable estimates
+                    honesty = TRUE,          # Enable honest inference
+                    honesty.fraction = 0.5,  # Split sample equally
+                    ci.group.size = 2)       # Individual confidence intervals
+
+# Generate predictions and uncertainty estimates
+tau_hat <- predict(cause_forest_m1)$predictions
+tau_se <- sqrt(predict(cause_forest_m1, estimate.variance = TRUE)$variance.estimates)
+
+# Construct confidence intervals
+tau_lower <- tau_hat - 1.96 * tau_se
+tau_upper <- tau_hat + 1.96 * tau_se
+```
+
+### Variable importance
+
+```{r}
+var_importance <- variable_importance(cause_forest_m1)
+colnames(X) <- c("age", "bmi", "baseline_hba1c", "hypertension", "cvd", "kidney_disease")
+
+importance_df <- data.frame(
+  Variable = colnames(X),
+  Importance = var_importance
+) %>%
+  arrange(desc(Importance))
+
+importance_df
+
+# Visualize importance
+ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Variable Importance for Treatment Effect Heterogeneity",
+       x = "Patient Characteristics", 
+       y = "Importance Score") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+```
+
+### Treatment effects
+
+```{r}
+# Test average treatment effect
+ate <- average_treatment_effect(cause_forest_m1)
+ate
+cat("95% CI: [", round(ate["estimate"] - 1.96 * ate["std.err"], 3),
+    ",", round(ate["estimate"] + 1.96 * ate["std.err"], 3), "]\n")
+
+# Test for significant heterogeneity
+het_test <- test_calibration(cause_forest_m1)
+het_test
+```
+
+The average treatment effect estimate provides the population-level summary that traditional clinical trials report, while the heterogeneity test formally evaluates whether personalized treatment rules offer advantages over treating all patients identically. A significant test result provides statistical evidence that the observed variation in treatment effects represents true heterogeneity rather than random noise.
+
+## Visualizing heterogeneity
+
+```{r}
+# Prepare data for visualization
+plot_data <- data.frame(
+  age = data$age,
+  baseline_hba1c = data$baseline_hba1c,
+  bmi = data$bmi,
+  predicted_effect = tau_hat,
+  true_effect = data$true_tau,
+  prediction_se = tau_se,
+  treatment = factor(treatment, labels = c("Control", "Treatment"))
+)
+
+# Validate predictions against truth
+ggplot(plot_data, aes(x = true_effect, y = predicted_effect)) +
+  geom_point(alpha = 0.1) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.3) +
+  labs(title = "Causal Forest Prediction Accuracy",
+       x = "True Treatment Effect (Black)", 
+       y = "Predicted Treatment Effect (Blue)") +
+  theme_minimal() 
+```
+
+```{r}
+# Create treatment effect heatmap
+ggplot(plot_data, aes(x = age, y = baseline_hba1c)) +
+  geom_point(aes(fill = predicted_effect), shape = 21, size = 3, alpha = 0.8) +
+  scale_fill_gradient2(low = "#fff7bc", mid = "#fec44f", high = "#d95f0e",
+                       midpoint = -0.75,
+                       name = "Predicted\nEffect",
+                       labels = function(x) paste0(x, "%")) +
+  labs(title = "Treatment Effect Heterogeneity Map",
+       subtitle = "Red = larger benefits, Yellow = smaller benefits",
+       x = "Age (years)", 
+       y = "Baseline HbA1c (%)") +
+  theme_minimal() 
+```
+
+These visualizations demonstrate the causal forest’s ability to recover complex treatment effect patterns. The prediction accuracy plot shows strong agreement between true and predicted effects, validating the algorithm’s performance. The heterogeneity map reveals clinically interpretable patterns where younger patients with higher baseline HbA1c (shown in red) experience the largest treatment benefits, while older patients with better initial control (shown in yellow) show minimal response.
+
+## Causal Forest with tuning
+
+Fitting the causal forest model. 
+
+```{r}
+Y <- data$Y
+treatment <- data$treatment
+X <- cbind(data$age, data$bmi, data$baseline_hba1c, data$hypertension, data$cvd, data$kidney_disease) ## Covariate Matrix
+
+
+cause_forest_m2 <- causal_forest(X, Y, treatment,
+                    #num.trees = 2000,        # Sufficient for stable estimates
+                    honesty = TRUE,          # Enable honest inference
+                    #honesty.fraction = 0.5,  # Split sample equally
+                    #ci.group.size = 2,       # Individual confidence intervals
+                    tune.parameters = "all")       
+
+# Generate predictions and uncertainty estimates
+tau_hat <- predict(cause_forest_m2)$predictions
+tau_se <- sqrt(predict(cause_forest_m2, estimate.variance = TRUE)$variance.estimates)
+
+# Construct confidence intervals
+tau_lower <- tau_hat - 1.96 * tau_se
+tau_upper <- tau_hat + 1.96 * tau_se
+```
+
+### Treatment effects - tuned
+
+```{r}
+# Test average treatment effect
+ate_tuned <- average_treatment_effect(cause_forest_m2)
+ate_tuned
+cat("95% CI: [", round(ate_tuned["estimate"] - 1.96 * ate_tuned["std.err"], 3),
+    ",", round(ate_tuned["estimate"] + 1.96 * ate_tuned["std.err"], 3), "]\n")
+
+# Test for significant heterogeneity
+het_test <- test_calibration(cause_forest_m2)
+het_test
+```
+
+#### Comparing not tuned and tuned
+
+```{r}
+ate
+
+ate_tuned
+```
+
+
+
+## Session Info
+
+```{r}
+sessionInfo()
+```
+
