@@ -12,6 +12,6 @@
 | 8    | February 24 | [ElasticNet Regression with Bootsrap](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/Ridge_Lasso_Regression.md) & [Cross Validation](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/cross_validation.md) |
 | 9    | March 3     | [Random Forest](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/random_forest.md)   |
 | 10   | March 10    | [Causal Forest](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/causal_forest.md)                                                |
-| 11   | March 17    | Artificial Neural Networks                                             |
+| 11   | March 17    | [Artificial Neural Networks](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/ann.md)                                             |
 | 12   | March 24    | Artificial Neural Networks Part 2                                      |
 | 13   | March 31     | Scientific Computing + Full ML Implementation                          |
