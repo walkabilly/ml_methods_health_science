@@ -151,7 +151,7 @@ One of the downsides of Tidymodels is that you often lose the ability to plot mo
 
 ##### Run during class
 
-```{}
+```{r}
 ## I've removed all categorical variables because they need to be dummy coded and I'm lazy
 
 basic_ann <- neuralnet(diabetes ~ PSE_ADULT_WRK_DURATION + 
@@ -195,7 +195,7 @@ mlp_workflow <-
   add_recipe(diabetes_recipe) %>% 
     tune_grid(resamples = folds,
                 control = control_grid(save_pred = TRUE, 
-                verbose = TRUE)) ## Edit for running live
+                verbose = FALSE)) ## Edit for running live
 ```
 
 ### Workflow results
@@ -269,7 +269,7 @@ mlp_workflow_2l <-
   add_recipe(diabetes_recipe) %>% 
     tune_grid(resamples = folds,
                 control = control_grid(save_pred = TRUE, 
-                verbose = TRUE)) ## Edit for running live
+                verbose = FALSE)) ## Edit for running live
 ```
 
 ### Workflow results
