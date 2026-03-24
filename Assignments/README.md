@@ -10,5 +10,5 @@
 | 6 | Causal Forest - REMOVED                     | 10%     |
 | 7 | [Artificial Neural Network](https://github.com/walkabilly/ml_methods_health_science/blob/main/Assignments/artificial_neural_network.md)          | 15%     |
 | 8 | [Scientific Computing](https://github.com/walkabilly/ml_methods_health_science/blob/main/Assignments/scientific_computing.md)               | 5%      |
-| 9 | Independent Analysis – Part 2      | 15%     |
-|   | **Total**                          | **100%**|
+| 9 | [Independent Analysis – Part 2](https://github.com/walkabilly/ml_methods_health_science/blob/main/Assignments/analysis_part2.md)      | 15%     |
+|   | **Total**                          | **85%**|
