@@ -195,7 +195,7 @@ mlp_workflow <-
   add_recipe(diabetes_recipe) %>% 
     tune_grid(resamples = folds,
                 control = control_grid(save_pred = TRUE, 
-                verbose = FALSE)) ## Edit for running live
+                verbose = TRUE)) ## Edit for running live
 ```
 
 ### Workflow results
@@ -269,7 +269,7 @@ mlp_workflow_2l <-
   add_recipe(diabetes_recipe) %>% 
     tune_grid(resamples = folds,
                 control = control_grid(save_pred = TRUE, 
-                verbose = FALSE)) ## Edit for running live
+                verbose = TRUE)) ## Edit for running live
 ```
 
 ### Workflow results

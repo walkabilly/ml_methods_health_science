@@ -14,4 +14,4 @@
 | 10   | March 10    | [Causal Forest](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/causal_forest.md)                                                |
 | 11   | March 17    | [Artificial Neural Networks](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/ann.md)                                             |
 | 12   | March 24    | Artificial Neural Networks Part 2                                      |
-| 13   | March 31     | [Scientific Computing](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/scientific_computing.md) + Full ML Implementation                          |
+| 13   | March 31     | [Scientific Computing](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/scientific_computing.md) + [Full ML Implementation](https://github.com/walkabilly/ml_methods_health_science/blob/main/Data%20Work/full_ml_implementation.md)                          |
