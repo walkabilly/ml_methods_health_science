@@ -138,7 +138,7 @@ You can find the detailed descriptions for all assignments below or in the assig
 | 3 | Unsupervised Learning              | 15%     | February 9, 2026  |
 | 4 | Independent Analysis – Part 1      | 10%     | February 23, 2026 |
 | 5 | Supervised Learning                | 15%     | March 9, 2026     |
-| 6 | Causal Forest                      | 10%     | March 23, 2026    |
+| 6 | Causal Forest - CANCELLED!         | 10%     | March 23, 2026    |
 | 7 | Artificial Neural Network          | 15%     | April 6, 2026     |
 | 8 | Scientific Computing               | 5%      | April 20, 2026    |
 | 9 | Independent Analysis – Part 2      | 15%     | April 20, 2026    |
@@ -176,7 +176,7 @@ __Due Date__: See Course Schedule.
 __Type__: This assignment will have students understand the supervised learning approaches.    
 __Description__: In this assignment you will apply and compare different methods for supervised learning on a large health administrative dataset, and will use bootstrap and cross-validation techniques.     
 
-### 6. Causal Forest 
+### 6. Causal Forest - CANCELLED!
 __Value__: 10% of final grade.    
 __Due Date__: See Course Schedule.    
 __Type__: This is a code-based assignment where you conduct a Random Forest analysis.     
