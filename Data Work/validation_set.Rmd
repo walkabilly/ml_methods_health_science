@@ -1,5 +1,5 @@
 ---
-title: "Full ML Implementation"
+title: "Validation Set"
 author: "Daniel Fuller"
 output:
       html_document:
@@ -27,7 +27,7 @@ library(themis)
 library(microbenchmark)
 ```
 
-# Support Vector Machines
+# Validation Set
 
 ## Research question and data
 
@@ -36,6 +36,12 @@ We are using an imputed (ie. no missing data) version of the CanPath student dat
 Our research question is:  
 
 - **Can we develop a model that will predict type 2 diabetes**
+
+## Validation Set
+
+Here we rather than using multiple iterations of resampling, let’s create a single resample called a validation set. In tidymodels, a validation set is treated as a single iteration of resampling. We’ll use the validation_split() function to allocate 20% of the data to the validation set and 10% to the training set. This means that our model performance metrics will be computed on the single validation set. This is fairly large, so the amount of data should provide enough precision to be a reliable indicator for how well each model predicts the outcome with a single iteration of resampling.
+
+![](https://www.tidymodels.org/start/case-study/img/validation-split.svg)
 
 ### Reading in data
 
@@ -83,24 +89,11 @@ data <- select(data, diabetes,
 This works across all models so we only need to run this once. 
 
 ```{r}
-set.seed(10)
-
-#### Cross Validation Split - With Validation Set
+#### Cross Validation Split
 cv_split <- initial_validation_split(data, 
                             strata = diabetes, 
                             prop = c(0.70, 0.20))
-```
 
-If we don't want the use validation data we can use the `initial_split` function instead.
-
-```{}
-cv_split_test <- initial_split(data, 
-                          strata = diabetes, 
-                          prop = 0.7)
-```
-
-
-```{r}
 # Create data frames for the two sets:
 train_data <- training(cv_split)
 table(train_data$diabetes)
@@ -124,7 +117,14 @@ This works across all models so we only need to run this once.
 
 ```{r}
 diabetes_recipe <- 
-  recipe(diabetes ~ ., data = train_data) %>%
+  recipe(diabetes ~ ., data = data) %>%
+  step_smotenc(diabetes, over_ratio = 0.9) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_predictors(), -all_outcomes()) %>%
+  step_normalize(all_numeric_predictors())
+
+diabetes_recipe_validation <- 
+  recipe(diabetes ~ ., data = validation_data) %>%
   step_smotenc(diabetes, over_ratio = 0.9) %>%
   step_dummy(all_nominal_predictors()) %>%
   step_zv(all_predictors(), -all_outcomes()) %>%
@@ -152,86 +152,57 @@ logistic_model <- logistic_reg(penalty = tune(), mixture = tune(),
                                 engine = "glmnet"
                                )
 
-logistic_workflow <- workflow() %>% 
+logistic_workflow_train <- workflow() %>% 
           add_model(logistic_model) %>% 
           add_recipe(diabetes_recipe) %>% 
-          tune_grid(resamples = folds,
+          tune_grid(train_data,
+                    resamples = folds,
                     control = control_grid(save_pred = TRUE, 
                                             verbose = FALSE)) ## Edit for running live
 
-collect_metrics(logistic_workflow) 
+collect_metrics(logistic_workflow_train) 
 
-show_best(logistic_workflow, metric='accuracy', n=5)  # only show the results for the best 5 models
+show_best(logistic_workflow_train, metric='brier_class', n=5)  # only show the results for the best 5 models
 
-autoplot(logistic_workflow, metric = 'accuracy') 
+autoplot(logistic_workflow_train, metric = 'brier_class') 
 ```
 
-### Random Forest
+## Validation Set
 
-Tuning parameters
-
-* __mtry__: An integer for the number of predictors that will be randomly sampled at each split when creating the tree models.
-* __trees__: An integer for the number of trees contained in the ensemble.
-* __min_n__: An integer for the minimum number of data points in a node that are required for the node to be split further.
-
-```{r RF Training}
-cores <- parallel::detectCores()
-cores
-
-rf_model <- rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
-              set_engine("ranger", num.threads = cores) %>% 
-              set_mode("classification")
-
-rf_workflow <- workflow() %>% 
-          add_model(rf_model) %>% 
+```{r Logistic Validation}
+logistic_workflow_validation <- workflow() %>% 
+          add_model(logistic_model) %>% 
           add_recipe(diabetes_recipe) %>% 
-          tune_grid(resamples = folds,
+          tune_grid(validation_data,
+                    resamples = folds,
                     control = control_grid(save_pred = TRUE, 
                                             verbose = FALSE)) ## Edit for running live
 
-collect_metrics(rf_workflow) 
+collect_metrics(logistic_workflow_validation) 
 
-show_best(rf_workflow, metric='accuracy', n=5)  # only show the results for the best 5 models
+show_best(logistic_workflow_validation, metric='brier_class', n=5)  # only show the results for the best 5 models
 
-autoplot(rf_workflow, metric = 'accuracy') 
+autoplot(logistic_workflow_validation, metric = 'brier_class') 
 ```
 
-### Support Vector Machine
+### Compare testing and validation
 
-Tuning parameters
+```{r}
+logistic_best_train <- 
+  logistic_workflow_train %>% 
+  select_best(metric = "brier_class")
 
-* __cost__ (default: 1.0): A positive number for the cost of predicting a sample within or on the wrong side of the margin. 
-Low cost, points that are misclassified are penalized less than with a higher cost. 
-How much do we are about misclassification? 
-* __margin__ (default: 0.1): Insensitivity margin, how wide a margin do we want to make to select the support vectors. (Does not apply in classification)
-* __rbf_sigma__  rbf_sigma (no default – estimated based on data) : A positive number for the radial basis function. Tune me!
+logistic_best_validation <- 
+  logistic_workflow_validation %>% 
+  select_best(metric = "brier_class")
 
-```{r SVM Training}
-svm_model <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>% 
-  set_mode("classification") %>%
-  set_engine("kernlab")
-
-svm_workflow <- workflow() %>% 
-          add_model(svm_model) %>% 
-          add_recipe(diabetes_recipe) %>% 
-          tune_grid(resamples = folds,
-                    control = control_grid(save_pred = FALSE, 
-                                            verbose = FALSE)) ## Edit for running live
-
-collect_metrics(svm_workflow) 
-
-show_best(svm_workflow, metric='accuracy', n=5)  # only show the results for the best 5 models
-
-autoplot(svm_workflow, metric = 'accuracy') 
+logistic_best_train
+logistic_best_validation
 ```
-
-## Best models 
-
-### Logistic Regression
 
 ```{r Logistic Final Model}
 logistic_best <- 
-  logistic_workflow %>% 
+  logistic_workflow_validation %>% 
   select_best(metric = "brier_class")
 
 logistic_final_model <- finalize_model(
@@ -250,63 +221,12 @@ final_logistic_results <- final_logistic_workflow %>%
 lr_results <- final_logistic_results %>% collect_metrics()
 ```
 
-### Random Forest
-
-```{r RF Final Model}
-rf_best <- 
-  rf_workflow %>% 
-  select_best(metric = "brier_class")
-
-rf_final_model <- finalize_model(
-                          rf_model,
-                          rf_best
-                          )
-rf_final_model
-
-final_rf_workflow <- workflow() %>%
-                      add_recipe(diabetes_recipe) %>%
-                      add_model(rf_final_model)
-
-final_rf_results <- final_rf_workflow %>%
-                    last_fit(cv_split)
-
-rf_results <- final_rf_results %>% collect_metrics()
-```
-
-### Support Vector Machine
-
-```{r SVM final model}
-svm_best <- 
-  svm_workflow %>% 
-  select_best(metric = "brier_class")
-
-svm_final_model <- finalize_model(
-                          svm_model,
-                          svm_best
-                          )
-svm_final_model
-
-final_svm_workflow <- workflow() %>%
-                      add_recipe(diabetes_recipe) %>%
-                      add_model(svm_final_model)
-
-final_svm_results <- final_svm_workflow %>%
-                      last_fit(cv_split)
-
-svm_results <- final_svm_results %>% collect_metrics()
-```
 
 ## Final Results
 
 ```{r}
 ### Logistic Regression
 kable(lr_results)
-
-### Random Forest
-kable(rf_results)
-
-### SVM
-kable(svm_results)
 ```
 
 ## Variable Importance
@@ -321,26 +241,6 @@ logistic_final_model %>%
   fit(diabetes ~ .,
     data = juice(prep)) %>%
   vip(geom = "point")
-```
-
-### Random Forest
-
-```{r}
-prep <- prep(diabetes_recipe)
-
-rf_final_model %>%
-  set_engine("ranger", importance = "permutation") %>%
-  fit(diabetes ~ .,
-    data = juice(prep)) %>%
-  vip(geom = "point")
-```
-
-### Benchmarks 
-
-We can check how long each model took to run using the `microbenchmark` package. These are nanoseconds, so there is no real difference here but this is a simple model with small data. 
-
-```{r, warning = FALSE}
-microbenchmark(logistic_workflow, rf_workflow, svm_workflow)
 ```
 
 ## Session Info
